@@ -76,7 +76,7 @@ def test_kmeans_on_images(test_images, kmeans):
         predictions = kmeans.predict(ratio_reshaped)
         test_results.append(predictions.reshape(ratio.shape))
     
-    return test_results
+    return np.array(test_results)
 
 # Visualize the results
 def visualize_clusters(test_images, test_results, cluster_names):
@@ -91,10 +91,10 @@ def visualize_clusters(test_images, test_results, cluster_names):
         
         # Map each cluster to a specific color for visualization
         cluster_colors = {
-            0: [255, 0, 0],    # Red for Cluster A
-            1: [0, 255, 0],    # Green for Cluster B
-            2: [0, 0, 255],    # Blue for Cluster C
-            3: [255, 255, 0],  # Yellow for Cluster D
+            0: [192, 192, 192],    # Red for Cluster A
+            1: [31, 119, 180],    # Green for Cluster B
+            2: [128, 128, 128],    # Blue for Cluster C
+            3: [176, 196, 222],  # Yellow for Cluster D
         }
         
         for cluster_id, color in cluster_colors.items():
@@ -147,3 +147,89 @@ test_results = test_kmeans_on_images(test_images, kmeans_model)
 visualize_clusters(test_images, test_results, cluster_names)
 
 
+
+
+def mapping(clustered_result, cluster_names, ghi_value):
+    """
+    Maps clusters of sky conditions to an irradiation map based on transmittance values and GHI.
+
+    """
+    
+    # Define transmittance values for each cluster
+    transmittance_values = {
+        "MC": 0.4,  # Mostly cloudy
+        "CS": 0.9,  # Clear sky, high transmittance
+        "OV": 0.1,  # Overcast sky, low transmittance
+        "PC": 0.7   # Partly cloudy
+    }
+    
+    # Create a map of transmittance based on the clusters
+    h, w = clustered_result.shape
+    transmittance_map = np.zeros((h, w))
+    
+    for cluster_id, cluster_name in cluster_names.items():
+        transmittance_map[clustered_result == cluster_id] = transmittance_values[cluster_name]
+    
+    # Multiply the transmittance by the GHI value to compute the irradiation map
+    irradiation_map = transmittance_map * ghi_value
+    
+    return irradiation_map
+
+
+# This has to be connected with pvlib library
+
+ghi_value = 1000  # Example GHI value in W/m²
+
+# Define the colormap for the cluster visualization
+cluster_colors = {
+    0: [192, 192, 192],    # Red for Cluster MC
+    1: [31, 119, 180],    # Green for Cluster CS
+    2: [128, 128, 128],    # Blue for Cluster OV
+    3: [176, 196, 222],  # Yellow for Cluster PC
+}
+
+
+# Loop over each image in the test_results
+for i, result in enumerate(test_results):
+    # Original image
+    original_image = test_images[i]
+
+    # Mapping function
+    irradiation_map = mapping(result, cluster_names, ghi_value)
+
+    # Clustered image with colors
+    h, w = result.shape
+    clustered_image = np.zeros((h, w, 3), dtype=np.uint8)
+    for cluster_id, color in cluster_colors.items():
+        clustered_image[result == cluster_id] = color
+
+    # Legend patches
+    legend_patches = [
+        mpatches.Patch(color=np.array(color) / 255.0, label=cluster_names[cluster_id])
+        for cluster_id, color in cluster_colors.items()
+    ]
+
+    # The original image, clustered image, and irradiation map side by side
+    plt.figure(figsize=(18, 6))
+
+    # Original Image
+    plt.subplot(1, 3, 1)
+    plt.imshow(original_image)
+    plt.title("Original Image")
+    plt.axis('off')
+
+    # Clustered Image with Legend
+    plt.subplot(1, 3, 2)
+    plt.imshow(clustered_image)
+    plt.title("Clustered Image")
+    plt.axis('off')
+    plt.legend(handles=legend_patches, loc='upper right', bbox_to_anchor=(1.2, 1))
+
+    # Irradiation Mapped Image
+    plt.subplot(1, 3, 3)
+    plt.imshow(irradiation_map, cmap='hot_r') 
+    plt.title("Irradiation Map")
+    plt.colorbar(label="Irradiation (W/m²)")
+    plt.axis('off')
+
+    plt.show()
