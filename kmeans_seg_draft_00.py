@@ -128,6 +128,8 @@ def visualize_clusters(test_images, test_results, cluster_names):
 
 # Image path
 folder_path = r'C:\Users\berhaned\OneDrive - SINTEF\Berhane_SIN_Industri\Jupyter_Python_SINTEF\SEP_2024\ghi-sky-mapper\ASI_imges'
+current_path = os.getcwd()
+folder_path = f'{current_path}/ASI_imges/'
 # Load images from the directory
 images = load_images_from_directory(folder_path)
 
