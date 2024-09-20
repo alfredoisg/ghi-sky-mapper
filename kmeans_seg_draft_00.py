@@ -4,8 +4,10 @@ import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
-# Step 1: Accept folder path and load all images from the directory
+
+# Load all images from the directory
 def load_images_from_directory(folder_path):
     if not os.path.isdir(folder_path):
         raise ValueError(f"The provided folder path does not exist: {folder_path}")
@@ -28,24 +30,22 @@ def load_images_from_directory(folder_path):
     
     return loaded_images
 
-# Step 2: Divide the images into training (80%) and testing (20%)
+# Divide the images into training (80%) and testing (20%)
 def split_images(images):
     n_train = int(0.8 * len(images))
     train_images = images[:n_train]
     test_images = images[n_train:]
     return train_images, test_images
 
-# Step 3: Extract RGB channels and calculate ratio = (B - R) / (B + R)
+# Extract RGB channels and calculate ratio = (B - R) / (B + R)
 def calculate_ratio(image):
     R = image[:, :, 0].astype(float)
     G = image[:, :, 1].astype(float)
     B = image[:, :, 2].astype(float)
-
-    # Avoid division by zero
     ratio = np.divide((B - R), (B + R), out=np.zeros_like(B), where=(B + R) != 0)
     return ratio
 
-# Step 4: Train KMeans clustering model
+# Train KMeans clustering model
 def train_kmeans_on_images(train_images, n_clusters=4):
     all_ratios = []
     
@@ -53,7 +53,7 @@ def train_kmeans_on_images(train_images, n_clusters=4):
         ratio = calculate_ratio(image)
         all_ratios.append(ratio.flatten())
     
-    # Combine all images' ratios into a single array for clustering
+    # All images ratios into a single array for clustering
     all_ratios = np.concatenate(all_ratios).reshape(-1, 1)
     
     kmeans = KMeans(n_clusters=n_clusters, random_state=42)
@@ -61,12 +61,12 @@ def train_kmeans_on_images(train_images, n_clusters=4):
     
     return kmeans
 
-# Step 5: Assign custom cluster names
+# Assign custom cluster names
 def assign_cluster_names(kmeans):
-    cluster_names = {0: "Cluster A", 1: "Cluster B", 2: "Cluster C", 3: "Cluster D"}
+    cluster_names = {0: "MC", 1: "CS", 2: "OV", 3: "PC"}
     return cluster_names
 
-# Step 6: Test the trained model on the test dataset
+# Test the trained model on the test dataset
 def test_kmeans_on_images(test_images, kmeans):
     test_results = []
     
@@ -78,7 +78,7 @@ def test_kmeans_on_images(test_images, kmeans):
     
     return test_results
 
-# Step 7: Visualize the clustering results using plots
+# Visualize the results
 def visualize_clusters(test_images, test_results, cluster_names):
     n_images = len(test_images)
     
@@ -100,34 +100,50 @@ def visualize_clusters(test_images, test_results, cluster_names):
         for cluster_id, color in cluster_colors.items():
             clustered_image[clustered_result == cluster_id] = color
 
+        # Prepare the legend for the clusters
+        legend_patches = [
+            mpatches.Patch(color=np.array(color) / 255.0, label=cluster_names[cluster_id])
+            for cluster_id, color in cluster_colors.items()
+        ]
+
         # Plot the original and clustered images side by side
         plt.figure(figsize=(10, 5))
+        
+        # Plot original image
         plt.subplot(1, 2, 1)
         plt.imshow(image)
         plt.title("Original Image")
+        plt.axis('off')  # Remove axis numbers and ticks
         
+        # Plot clustered image with legend
         plt.subplot(1, 2, 2)
         plt.imshow(clustered_image)
         plt.title("Clustered Image")
+        plt.axis('off')  # Remove axis numbers and ticks
+        
+        # Add legend
+        plt.legend(handles=legend_patches, loc='upper right', bbox_to_anchor=(1.2, 1))
         
         plt.show()
 
-# Main function to execute the complete workflow
+# Image path
 folder_path = r'C:\Users\berhaned\OneDrive - SINTEF\Berhane_SIN_Industri\Jupyter_Python_SINTEF\SEP_2024\ghi-sky-mapper\ASI_imges'
-# Step 1: Load images from the directory
+# Load images from the directory
 images = load_images_from_directory(folder_path)
 
-# Step 2: Split the images into training and testing datasets
+# Split the images into training and testing datasets
 train_images, test_images = split_images(images)
 
-# Step 3 & 4: Calculate the ratio and train KMeans on the training dataset
+# Calculate the ratio and train KMeans on the training dataset
 kmeans_model = train_kmeans_on_images(train_images)
 
-# Step 5: Assign custom cluster names
+# Assign custom cluster names
 cluster_names = assign_cluster_names(kmeans_model)
 
-# Step 6: Test the KMeans model on the test dataset
+# Test the KMeans model on the test dataset
 test_results = test_kmeans_on_images(test_images, kmeans_model)
 
-# Step 7: Visualize the test results
+# Visualize the test results
 visualize_clusters(test_images, test_results, cluster_names)
+
+
