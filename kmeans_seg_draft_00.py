@@ -2,123 +2,132 @@ import os
 import cv2
 import numpy as np
 from sklearn.cluster import KMeans
-import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
 
-# Step 1: Accept folder path and load image
-def load_image(image_path):
-    image = cv2.imread(image_path)
-    if image is None:
-        raise ValueError(f"Could not load the image at {image_path}")
-    # Convert BGR (default in OpenCV) to RGB for consistency
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    return image
+# Step 1: Accept folder path and load all images from the directory
+def load_images_from_directory(folder_path):
+    if not os.path.isdir(folder_path):
+        raise ValueError(f"The provided folder path does not exist: {folder_path}")
+    
+    loaded_images = []
+    for filename in os.listdir(folder_path):
+        image_path = os.path.join(folder_path, filename)
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff')):
+            image = cv2.imread(image_path)
+            if image is None:
+                print(f"Warning: Could not load image at {image_path}, skipping.")
+                continue
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            loaded_images.append(image_rgb)
+        else:
+            print(f"File {filename} is not a valid image file, skipping.")
+    
+    if not loaded_images:
+        raise ValueError(f"No valid images were found in the folder: {folder_path}")
+    
+    return loaded_images
 
-# Step 2: Divide the image into training (80%) and testing (20%)
-def split_image(image):
-    h, w, _ = image.shape
-    # Reshape to (num_pixels, 3) where 3 is for RGB
-    pixels = image.reshape(-1, 3)
+# Step 2: Divide the images into training (80%) and testing (20%)
+def split_images(images):
+    n_train = int(0.8 * len(images))
+    train_images = images[:n_train]
+    test_images = images[n_train:]
+    return train_images, test_images
 
-    # Use sklearn train_test_split to split into 80% training and 20% testing
-    train_pixels, test_pixels = train_test_split(pixels, test_size=0.2, shuffle=False)
-    return train_pixels, test_pixels
-
-# Step 3: Extract RGB channels and calculate the ratio = (B - R) / (B + R)
-def calculate_ratio(pixels):
-    R = pixels[:, 0].astype(float)
-    G = pixels[:, 1].astype(float)
-    B = pixels[:, 2].astype(float)
+# Step 3: Extract RGB channels and calculate ratio = (B - R) / (B + R)
+def calculate_ratio(image):
+    R = image[:, :, 0].astype(float)
+    G = image[:, :, 1].astype(float)
+    B = image[:, :, 2].astype(float)
 
     # Avoid division by zero
     ratio = np.divide((B - R), (B + R), out=np.zeros_like(B), where=(B + R) != 0)
     return ratio
 
 # Step 4: Train KMeans clustering model
-def train_kmeans(ratio, n_clusters=4):
-    # Reshape the ratio array to 2D to fit KMeans (num_pixels, 1)
-    ratio_reshaped = ratio.reshape(-1, 1)
-
-    # Train the KMeans clustering algorithm
+def train_kmeans_on_images(train_images, n_clusters=4):
+    all_ratios = []
+    
+    for image in train_images:
+        ratio = calculate_ratio(image)
+        all_ratios.append(ratio.flatten())
+    
+    # Combine all images' ratios into a single array for clustering
+    all_ratios = np.concatenate(all_ratios).reshape(-1, 1)
+    
     kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-    kmeans.fit(ratio_reshaped)
+    kmeans.fit(all_ratios)
+    
     return kmeans
 
 # Step 5: Assign custom cluster names
 def assign_cluster_names(kmeans):
     cluster_names = {0: "Cluster A", 1: "Cluster B", 2: "Cluster C", 3: "Cluster D"}
-    return [cluster_names[label] for label in kmeans.labels_]
+    return cluster_names
 
-# Step 6: Test the trained model
-def test_model(kmeans, test_ratio):
-    test_ratio_reshaped = test_ratio.reshape(-1, 1)
-    predictions = kmeans.predict(test_ratio_reshaped)
-    return predictions
-
-# Step 7: Visualize clusters using plots
-def visualize_clusters(image, train_pixels, test_pixels, train_labels, test_labels):
-    h, w, _ = image.shape
+# Step 6: Test the trained model on the test dataset
+def test_kmeans_on_images(test_images, kmeans):
+    test_results = []
     
-    # Reshape the labels back to the image shape
-    train_image_labels = np.zeros((train_pixels.shape[0], 3), dtype=int)
-    test_image_labels = np.zeros((test_pixels.shape[0], 3), dtype=int)
-
-    cluster_colors = {
-        0: [255, 0, 0],    # Red for Cluster A
-        1: [0, 255, 0],    # Green for Cluster B
-        2: [0, 0, 255],    # Blue for Cluster C
-        3: [255, 255, 0],  # Yellow for Cluster D
-    }
-
-    # Map the cluster labels to colors for visualization
-    for idx, label in enumerate(train_labels):
-        train_image_labels[idx] = cluster_colors[label]
-
-    for idx, label in enumerate(test_labels):
-        test_image_labels[idx] = cluster_colors[label]
-
-    # Reshape train and test labeled images back to original dimensions
-    train_image = train_image_labels.reshape((int(h * 0.8), w, 3))
-    test_image = test_image_labels.reshape((int(h * 0.2), w, 3))
-
-    # Plot the original image, training clusters, and testing clusters
-    fig, axs = plt.subplots(1, 3, figsize=(20, 10))
-    axs[0].imshow(image)
-    axs[0].set_title("Original Image")
+    for image in test_images:
+        ratio = calculate_ratio(image)
+        ratio_reshaped = ratio.flatten().reshape(-1, 1)
+        predictions = kmeans.predict(ratio_reshaped)
+        test_results.append(predictions.reshape(ratio.shape))
     
-    axs[1].imshow(train_image)
-    axs[1].set_title("Training Clusters")
+    return test_results
+
+# Step 7: Visualize the clustering results using plots
+def visualize_clusters(test_images, test_results, cluster_names):
+    n_images = len(test_images)
     
-    axs[2].imshow(test_image)
-    axs[2].set_title("Testing Clusters")
+    for i in range(n_images):
+        image = test_images[i]
+        clustered_result = test_results[i]
+        
+        h, w = clustered_result.shape
+        clustered_image = np.zeros((h, w, 3), dtype=np.uint8)
+        
+        # Map each cluster to a specific color for visualization
+        cluster_colors = {
+            0: [255, 0, 0],    # Red for Cluster A
+            1: [0, 255, 0],    # Green for Cluster B
+            2: [0, 0, 255],    # Blue for Cluster C
+            3: [255, 255, 0],  # Yellow for Cluster D
+        }
+        
+        for cluster_id, color in cluster_colors.items():
+            clustered_image[clustered_result == cluster_id] = color
 
-    plt.show()
+        # Plot the original and clustered images side by side
+        plt.figure(figsize=(10, 5))
+        plt.subplot(1, 2, 1)
+        plt.imshow(image)
+        plt.title("Original Image")
+        
+        plt.subplot(1, 2, 2)
+        plt.imshow(clustered_image)
+        plt.title("Clustered Image")
+        
+        plt.show()
 
-# Main function to process the image and run the steps
-def main(image_path):
-    # Load the image
-    image = load_image(image_path)
+# Main function to execute the complete workflow
+folder_path = r'C:\Users\berhaned\OneDrive - SINTEF\Berhane_SIN_Industri\Jupyter_Python_SINTEF\SEP_2024\ghi-sky-mapper\ASI_imges'
+# Step 1: Load images from the directory
+images = load_images_from_directory(folder_path)
 
-    # Split the image into training and testing sets
-    train_pixels, test_pixels = split_image(image)
+# Step 2: Split the images into training and testing datasets
+train_images, test_images = split_images(images)
 
-    # Calculate the ratio for training and testing sets
-    train_ratio = calculate_ratio(train_pixels)
-    test_ratio = calculate_ratio(test_pixels)
+# Step 3 & 4: Calculate the ratio and train KMeans on the training dataset
+kmeans_model = train_kmeans_on_images(train_images)
 
-    # Train KMeans on training data
-    kmeans = train_kmeans(train_ratio)
+# Step 5: Assign custom cluster names
+cluster_names = assign_cluster_names(kmeans_model)
 
-    # Assign custom cluster names to the trained model
-    train_labels = kmeans.predict(train_ratio.reshape(-1, 1))
-    
-    # Test the model on the test data
-    test_labels = test_model(kmeans, test_ratio)
+# Step 6: Test the KMeans model on the test dataset
+test_results = test_kmeans_on_images(test_images, kmeans_model)
 
-    # Visualize the results
-    visualize_clusters(image, train_pixels, test_pixels, train_labels, test_labels)
-
-# Provide the image path and run the program
-if __name__ == "__main__":
-    image_path = "path_to_your_image.jpg"
-    main(image_path)
+# Step 7: Visualize the test results
+visualize_clusters(test_images, test_results, cluster_names)
